@@ -26,6 +26,7 @@ def get_hostname():
 def update_task_instance(instance, last_signal, task_finished):
     instance.state_id = last_signal.pk
     update_fields = ['state_id']
+    
     if task_finished:
         instance.finished = True
         update_fields.append('finished')
@@ -42,6 +43,10 @@ def update_task_instance(instance, last_signal, task_finished):
                     instance.progress_count = progress_count
                     update_fields.append('progress_count')
 
+    elif task_finished == False:
+        instance.finished = False
+        update_fields.append('finished')
+
     instance.save(update_fields=update_fields)
 
 
@@ -50,8 +55,17 @@ def store_signals(signal, task, exc=None):
     """
     Store all Huey signals.
     """
-    task_id = uuid.UUID(task.id)
+    create_signal(
+        signal, 
+        uuid.UUID(task.id), 
+        task_name=task.name, 
+        exc=None,
+        )
 
+def create_signal(signal, task_id, task_name='', exc=None):
+    """
+    create SignalInfoModel instance
+    """
     # Task no longer waits or run?
     task_finished = signal in ENDED_HUEY_SIGNALS
 
@@ -74,7 +88,7 @@ def store_signals(signal, task, exc=None):
     with transaction.atomic():
         task_model_instance, created = TaskModel.objects.get_or_create(
             task_id=task_id,
-            defaults={'name': task.name}
+            defaults={'name': task_name}
         )
 
         signal_kwargs['task'] = task_model_instance
@@ -88,6 +102,14 @@ def store_signals(signal, task, exc=None):
             last_signal=last_signal,
             task_finished=task_finished,
         )
+
+        if task_model_instance.parent_task:
+            update_task_instance(
+                instance=task_model_instance.parent_task,
+                last_signal=last_signal,
+                task_finished = False if created else None, 
+                # a new subtask has been initiated so parent task is still executing
+            )
 
 
 @on_startup()
