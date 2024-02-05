@@ -3,7 +3,7 @@ name: tests
 on:
   push:
     branches:
-      - main, completion-parent-task
+      - [main, completion-parent-task]
   pull_request:
   schedule:
     - cron: '0 8 * * *'
